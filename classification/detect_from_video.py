@@ -22,6 +22,7 @@ from tqdm import tqdm
 
 from network.models import model_selection
 from dataset.transform import xception_default_data_transforms
+import torchvision.transforms as transforms
 
 
 def get_boundingbox(face, width, height, scale=1.3, minsize=None):
@@ -54,7 +55,7 @@ def get_boundingbox(face, width, height, scale=1.3, minsize=None):
     return x1, y1, size_bb
 
 
-def preprocess_image(image, cuda=True):
+def preprocess_image(input_image, cuda=True):
     """
     Preprocesses the image such that it can be fed into our network.
     During this process we envoke PIL to cast it into a PIL image.
@@ -63,14 +64,30 @@ def preprocess_image(image, cuda=True):
     :return: pytorch tensor of shape [1, 3, image_size, image_size], not
     necessarily casted to cuda
     """
+
     # Revert from BGR
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    input_image = cv2.cvtColor(input_image, cv2.COLOR_BGR2RGB)
+    input_image = pil_image.fromarray(input_image)
+    
     # Preprocess using the preprocessing function used during training and
     # casting it to PIL image
-    preprocess = xception_default_data_transforms['test']
-    preprocessed_image = preprocess(pil_image.fromarray(image))
+    ##preprocess = xception_default_data_transforms['test']
+    #preprocessed_image = preprocess(pil_image.fromarray(image))
+
+    preprocess = preprocess = transforms.Compose([
+                            transforms.Resize(256),
+                            transforms.CenterCrop(224),
+                            transforms.ToTensor(),
+                            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+
+    input_tensor = preprocess(input_image)
+
     # Add first dimension as the network expects a batch
-    preprocessed_image = preprocessed_image.unsqueeze(0)
+
+    preprocessed_image = input_tensor.unsqueeze(0)
+
     if cuda:
         preprocessed_image = preprocessed_image.cuda()
     return preprocessed_image
@@ -132,7 +149,7 @@ def test_full_image_network(video_path, model_path, output_path,
     face_detector = dlib.get_frontal_face_detector()
 
     # Load model
-    model, *_ = model_selection(modelname='xception', num_out_classes=2)
+    model, *_ = model_selection(modelname='resnet18', num_out_classes=2)
     if model_path is not None:
         model = torch.load(model_path)
         print('Model found in {}'.format(model_path))
@@ -206,8 +223,8 @@ def test_full_image_network(video_path, model_path, output_path,
             break
 
         # Show
-        cv2.imshow('test', image)
-        cv2.waitKey(33)     # About 30 fps
+        #cv2.imshow('test', image)
+        #cv2.waitKey(33)     # About 30 fps
         writer.write(image)
     pbar.close()
     if writer is not None:
